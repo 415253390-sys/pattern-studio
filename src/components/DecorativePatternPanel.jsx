@@ -5,6 +5,8 @@ import './DecorativePatternPanel.css'
 function DecorativePatternPanel({ patterns, onPatternsChange }) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [processingId, setProcessingId] = useState(null)
+  const [useTransparency, setUseTransparency] = useState(true)
+  const [expandedPreview, setExpandedPreview] = useState(null)
 
   const handleAddPattern = () => {
     if (patterns.length >= 8) {
@@ -36,16 +38,17 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
       const reader = new FileReader()
       reader.onload = async (event) => {
         try {
-          // 如果是 PNG，自动抠图移除背景
-          let processedSrc = event.target.result
-          
-          if (file.type === 'image/png') {
-            processedSrc = await removeBackground(event.target.result)
+          let originalSrc = event.target.result
+          let processedSrc = originalSrc
+
+          if (useTransparency && file.type === 'image/png') {
+            processedSrc = await removeBackground(originalSrc)
           }
 
           const newPattern = {
             id: newId,
-            src: processedSrc,
+            src: originalSrc,
+            processedSrc: processedSrc,
             name: file.name,
             quantity: 4,
             radius: 150,
@@ -54,6 +57,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
             rotation: 0
           }
           onPatternsChange([...patterns, newPattern])
+          setExpandedPreview(newId)
         } catch (error) {
           console.error('处理图像失败:', error)
           alert('处理图像失败，请重试')
@@ -85,6 +89,21 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
 
       {isExpanded && (
         <div className="panel-body">
+          {/* 全局透明背景开关 */}
+          <div className="transparency-toggle">
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={useTransparency}
+                onChange={(e) => setUseTransparency(e.target.checked)}
+                className="toggle-input"
+              />
+              <span className="toggle-text">
+                {useTransparency ? '✓ 自动透明背景' : '✗ 保留原背景'}
+              </span>
+            </label>
+          </div>
+
           {patterns.length === 0 ? (
             <p className="empty-text">暂无装饰图案</p>
           ) : (
@@ -93,13 +112,31 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                 <div key={pattern.id} className="pattern-item">
                   <div className="pattern-header">
                     <span className="pattern-name">{pattern.name}</span>
-                    <button
-                      onClick={() => handleRemovePattern(pattern.id)}
-                      className="remove-btn"
-                    >
-                      ✕
-                    </button>
+                    <div className="pattern-actions">
+                      <button
+                        onClick={() => setExpandedPreview(
+                          expandedPreview === pattern.id ? null : pattern.id
+                        )}
+                        className="preview-btn"
+                        title="查看抠图预览"
+                      >
+                        👁️
+                      </button>
+                      <button
+                        onClick={() => handleRemovePattern(pattern.id)}
+                        className="remove-btn"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
+
+                  {/* 预览展开 */}
+                  {expandedPreview === pattern.id && pattern.processedSrc && (
+                    <div className="preview-expanded">
+                      <img src={pattern.processedSrc} alt="preview" className="preview-img" />
+                    </div>
+                  )}
 
                   {/* 数量 */}
                   <div className="control-group">
@@ -177,7 +214,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                     />
                   </div>
 
-                  {/* 旋转 - 关键！轴向中心点旋转 */}
+                  {/* 旋转 */}
                   <div className="control-group">
                     <label className="control-label">
                       旋转：<span className="value">{pattern.rotation}°</span>
