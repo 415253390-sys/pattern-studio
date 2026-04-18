@@ -58,6 +58,9 @@ function PatternDesigner() {
 
       {/* 右侧画布区域 */}
       <div className="canvas-area">
+        <div className="canvas-size-label">
+          🔵 800×800px
+        </div>
         <canvas
           ref={canvasRef}
           width={800}
