@@ -5,6 +5,7 @@ import './DecorativePatternPanel.css'
 function DecorativePatternPanel({ patterns, onPatternsChange }) {
   const [isExpanded, setIsExpanded] = useState(true)
   const [processingId, setProcessingId] = useState(null)
+  const [processingStatus, setProcessingStatus] = useState({})
   const [useTransparency, setUseTransparency] = useState(true)
   const [expandedPreview, setExpandedPreview] = useState(null)
 
@@ -34,6 +35,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
 
       const newId = Date.now()
       setProcessingId(newId)
+      setProcessingStatus(prev => ({...prev, [newId]: '上传中...'}))
 
       const reader = new FileReader()
       reader.onload = async (event) => {
@@ -41,8 +43,17 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
           let originalSrc = event.target.result
           let processedSrc = originalSrc
 
+          // 如果启用透明背景且是 PNG，自动抠图
           if (useTransparency && file.type === 'image/png') {
+            setProcessingStatus(prev => ({...prev, [newId]: '✨ 抠图处理中...'}))
+            console.log('装饰图案开始抠图处理...')
             processedSrc = await removeBackground(originalSrc)
+            setProcessingStatus(prev => ({...prev, [newId]: '✅ 抠图完成！'}))
+            console.log('装饰图案抠图完成')
+          } else if (useTransparency && file.type !== 'image/png') {
+            setProcessingStatus(prev => ({...prev, [newId]: '📌 仅 PNG 支持自动透明'}))
+          } else {
+            setProcessingStatus(prev => ({...prev, [newId]: '✓ 上传成功'}))
           }
 
           const newPattern = {
@@ -58,9 +69,28 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
           }
           onPatternsChange([...patterns, newPattern])
           setExpandedPreview(newId)
+
+          // 延迟清除状态提示
+          setTimeout(() => {
+            setProcessingStatus(prev => {
+              const newStatus = {...prev}
+              delete newStatus[newId]
+              return newStatus
+            })
+          }, 1500)
+
         } catch (error) {
-          console.error('处理图像失败:', error)
-          alert('处理图像失败，请重试')
+          console.error('处理装饰图案失败:', error)
+          setProcessingStatus(prev => ({...prev, [newId]: '❌ 处理失败'}))
+          alert('处理图像失败: ' + error.message)
+          
+          setTimeout(() => {
+            setProcessingStatus(prev => {
+              const newStatus = {...prev}
+              delete newStatus[newId]
+              return newStatus
+            })
+          }, 2000)
         } finally {
           setProcessingId(null)
         }
@@ -102,6 +132,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                 {useTransparency ? '✓ 自动透明背景' : '✗ 保留原背景'}
               </span>
             </label>
+            <p className="toggle-hint">PNG 自动抠图变透明</p>
           </div>
 
           {patterns.length === 0 ? (
@@ -111,7 +142,12 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
               {patterns.map((pattern) => (
                 <div key={pattern.id} className="pattern-item">
                   <div className="pattern-header">
-                    <span className="pattern-name">{pattern.name}</span>
+                    <div className="pattern-info">
+                      <span className="pattern-name">{pattern.name}</span>
+                      {processingStatus[pattern.id] && (
+                        <span className="pattern-status">{processingStatus[pattern.id]}</span>
+                      )}
+                    </div>
                     <div className="pattern-actions">
                       <button
                         onClick={() => setExpandedPreview(
@@ -134,6 +170,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                   {/* 预览展开 */}
                   {expandedPreview === pattern.id && pattern.processedSrc && (
                     <div className="preview-expanded">
+                      <h5 className="preview-label">✨ 抠图预览</h5>
                       <img src={pattern.processedSrc} alt="preview" className="preview-img" />
                     </div>
                   )}
