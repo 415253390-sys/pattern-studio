@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { removeBackground } from '../utils/canvasUtils'
+import { removeBackgroundAdvanced, extractImageColors } from '../utils/canvasUtils'
 import './CentralPatternPanel.css'
 
 function CentralPatternPanel({
@@ -15,12 +15,20 @@ function CentralPatternPanel({
   const [previewImage, setPreviewImage] = useState(null)
   const [useTransparency, setUseTransparency] = useState(true)
   const [processingStatus, setProcessingStatus] = useState('')
+  
+  // ✅ 新增：颜色拾取器状态
+  const [originalImageData, setOriginalImageData] = useState(null)
+  const [thumbnailImage, setThumbnailImage] = useState(null)
+  const [selectedColors, setSelectedColors] = useState([])
+  const [tolerance, setTolerance] = useState(30)
+  const [useGlobalRemoval, setUseGlobalRemoval] = useState(true)
+  const [showColorPicker, setShowColorPicker] = useState(false)
+  const [featheringStrength, setFeatheringStrength] = useState(1.0)
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // ✅ 支持所有图片格式
     const validTypes = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/gif', 'image/webp']
     if (!validTypes.includes(file.type)) {
       alert('仅支持 JPG、PNG、SVG、GIF、WebP 格式')
@@ -36,20 +44,30 @@ function CentralPatternPanel({
     setIsProcessing(true)
     setShowPreview(false)
     setProcessingStatus('上传中...')
+    setSelectedColors([])
 
     const reader = new FileReader()
     reader.onload = async (event) => {
       try {
-        let originalSrc = event.target.result
+        const originalSrc = event.target.result
+        setThumbnailImage(originalSrc)
+        setOriginalImageData(originalSrc)
+
         let processedSrc = originalSrc
 
-        // ✅ 所有格式都可以自动抠图
         if (useTransparency) {
-          setProcessingStatus('✨ 抠图处理中...')
-          console.log(`开始抠图处理 (${file.type})`)
-          processedSrc = await removeBackground(originalSrc)
+          setProcessingStatus('✨ 自动抠图中...')
+          console.log(`开始自动抠图处理 (${file.type})`)
+          
+          processedSrc = await removeBackgroundAdvanced(originalSrc, {
+            targetColors: [],
+            tolerance: tolerance,
+            useGlobalRemoval: useGlobalRemoval,
+            featheringStrength: featheringStrength
+          })
+          
           setProcessingStatus('✅ 抠图完成！')
-          console.log('抠图完成')
+          setShowColorPicker(true)
         } else {
           setProcessingStatus('✓ 上传成功')
         }
@@ -77,6 +95,81 @@ function CentralPatternPanel({
     reader.readAsDataURL(file)
   }
 
+  // ✅ 吸管工具：点击缩略图获取颜色
+  const handleColorPick = async (e) => {
+    if (!thumbnailImage) return
+    
+    const canvas = e.currentTarget
+    const rect = canvas.getBoundingClientRect()
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width)
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height)
+
+    try {
+      const imageData = await extractImageColors(thumbnailImage)
+      const data = imageData.data
+      const pixelIndex = (Math.floor(y) * imageData.width + Math.floor(x)) * 4
+      
+      const pickedColor = {
+        r: data[pixelIndex],
+        g: data[pixelIndex + 1],
+        b: data[pixelIndex + 2]
+      }
+      
+      console.log('拾取颜色:', pickedColor)
+      
+      // 添加到选中颜色列表
+      const newColors = [...selectedColors, pickedColor]
+      if (newColors.length > 2) {
+        newColors.shift() // 最多保留2种颜色
+      }
+      setSelectedColors(newColors)
+      
+      // 重新处理
+      await reprocessWithNewColors(newColors)
+      
+    } catch (error) {
+      console.error('拾取颜色失败:', error)
+    }
+  }
+
+  // 重新处理图像
+  const reprocessWithNewColors = async (colors) => {
+    if (!originalImageData) return
+    
+    setProcessingStatus('🔄 重新处理中...')
+    
+    try {
+      const processedSrc = await removeBackgroundAdvanced(originalImageData, {
+        targetColors: colors,
+        tolerance: tolerance,
+        useGlobalRemoval: useGlobalRemoval,
+        featheringStrength: featheringStrength
+      })
+      
+      setPreviewImage(processedSrc)
+      setProcessingStatus('✅ 处理完成！')
+      
+      setTimeout(() => setProcessingStatus(''), 1500)
+      
+      // 更新上传的图案
+      onPatternUpload({
+        src: originalImageData,
+        processedSrc: processedSrc,
+        name: fileName,
+        type: 'image/png'
+      })
+    } catch (error) {
+      console.error('重新处理失败:', error)
+      setProcessingStatus('❌ 处理失败')
+    }
+  }
+
+  // 清除选中颜色
+  const clearSelectedColors = () => {
+    setSelectedColors([])
+    setProcessingStatus('')
+  }
+
   return (
     <div className="central-pattern-panel">
       <h3 className="panel-title">中心图案</h3>
@@ -94,7 +187,7 @@ function CentralPatternPanel({
             {useTransparency ? '✓ 自动透明背景' : '✗ 保留原背景'}
           </span>
         </label>
-        <p className="toggle-hint">自动抠图去除背景</p>
+        <p className="toggle-hint">点击缩略图吸取背景色</p>
       </div>
 
       {/* 文件上传 */}
@@ -117,6 +210,128 @@ function CentralPatternPanel({
           <p className="processing-status">{processingStatus}</p>
         )}
       </div>
+
+      {/* ✅ 颜色拾取器 */}
+      {showColorPicker && thumbnailImage && useTransparency && (
+        <div className="color-picker-section">
+          <h4 className="color-picker-title">🎨 多目标颜色拾取</h4>
+          <p className="color-picker-hint">点击缩略图吸取背景颜色（最多2种）</p>
+          
+          <canvas
+            className="thumbnail-canvas"
+            onClick={handleColorPick}
+            style={{
+              backgroundImage: `url(${thumbnailImage})`,
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center'
+            }}
+            width={100}
+            height={100}
+          />
+          
+          {/* 已选颜色显示 */}
+          {selectedColors.length > 0 && (
+            <div className="selected-colors">
+              <p className="colors-label">已选颜色：</p>
+              <div className="colors-display">
+                {selectedColors.map((color, idx) => (
+                  <div
+                    key={idx}
+                    className="color-chip"
+                    style={{
+                      backgroundColor: `rgb(${color.r},${color.g},${color.b})`
+                    }}
+                    title={`RGB(${color.r},${color.g},${color.b})`}
+                  >
+                    <span className="color-index">{idx + 1}</span>
+                  </div>
+                ))}
+              </div>
+              <button onClick={clearSelectedColors} className="clear-colors-btn">
+                🔄 清除
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ✅ 抠图参数调整 */}
+      {useTransparency && (
+        <div className="advanced-settings">
+          <h4 className="settings-title">⚙️ 高级设置</h4>
+          
+          {/* 容差滑块 */}
+          <div className="control-group">
+            <label className="control-label">
+              容差值
+              <span className="control-value">{tolerance}</span>
+            </label>
+            <input
+              type="range"
+              min="5"
+              max="100"
+              value={tolerance}
+              onChange={(e) => {
+                setTolerance(Number(e.target.value))
+                if (selectedColors.length > 0 || originalImageData) {
+                  reprocessWithNewColors(selectedColors)
+                }
+              }}
+              className="slider"
+            />
+            <div className="slider-labels">
+              <span>严格</span>
+              <span>宽松</span>
+            </div>
+          </div>
+
+          {/* 全局消除开关 */}
+          <div className="setting-toggle">
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={useGlobalRemoval}
+                onChange={(e) => {
+                  setUseGlobalRemoval(e.target.checked)
+                  if (selectedColors.length > 0 || originalImageData) {
+                    reprocessWithNewColors(selectedColors)
+                  }
+                }}
+                className="toggle-input"
+              />
+              <span className="toggle-text">全局深度消除</span>
+            </label>
+            <p className="toggle-hint">穿透图像内部，清理孤岛</p>
+          </div>
+
+          {/* 羽化强度 */}
+          <div className="control-group">
+            <label className="control-label">
+              羽化强度
+              <span className="control-value">{(featheringStrength * 100).toFixed(0)}%</span>
+            </label>
+            <input
+              type="range"
+              min="0.2"
+              max="2"
+              step="0.1"
+              value={featheringStrength}
+              onChange={(e) => {
+                setFeatheringStrength(Number(e.target.value))
+                if (selectedColors.length > 0 || originalImageData) {
+                  reprocessWithNewColors(selectedColors)
+                }
+              }}
+              className="slider"
+            />
+            <div className="slider-labels">
+              <span>轻柔</span>
+              <span>强烈</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 预览区域 */}
       {showPreview && previewImage && (
