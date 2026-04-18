@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { removeBackground } from '../utils/canvasUtils'
 import './DecorativePatternPanel.css'
 
 function DecorativePatternPanel({ patterns, onPatternsChange }) {
   const [isExpanded, setIsExpanded] = useState(true)
+  const [processingId, setProcessingId] = useState(null)
 
   const handleAddPattern = () => {
     if (patterns.length >= 8) {
@@ -13,7 +15,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/jpeg,image/png,image/svg+xml'
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = e.target.files?.[0]
       if (!file) return
 
@@ -28,19 +30,36 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
         return
       }
 
+      const newId = Date.now()
+      setProcessingId(newId)
+
       const reader = new FileReader()
-      reader.onload = (event) => {
-        const newPattern = {
-          id: Date.now(),
-          src: event.target.result,
-          name: file.name,
-          quantity: 4,
-          radius: 150,
-          angle: 0,
-          scale: 100,
-          rotation: 0
+      reader.onload = async (event) => {
+        try {
+          // 如果是 PNG，自动抠图移除背景
+          let processedSrc = event.target.result
+          
+          if (file.type === 'image/png') {
+            processedSrc = await removeBackground(event.target.result)
+          }
+
+          const newPattern = {
+            id: newId,
+            src: processedSrc,
+            name: file.name,
+            quantity: 4,
+            radius: 150,
+            angle: 0,
+            scale: 100,
+            rotation: 0
+          }
+          onPatternsChange([...patterns, newPattern])
+        } catch (error) {
+          console.error('处理图像失败:', error)
+          alert('处理图像失败，请重试')
+        } finally {
+          setProcessingId(null)
         }
-        onPatternsChange([...patterns, newPattern])
       }
       reader.readAsDataURL(file)
     }
@@ -158,7 +177,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                     />
                   </div>
 
-                  {/* 旋转 */}
+                  {/* 旋转 - 关键！轴向中心点旋转 */}
                   <div className="control-group">
                     <label className="control-label">
                       旋转：<span className="value">{pattern.rotation}°</span>
@@ -175,6 +194,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                       }
                       className="slider"
                     />
+                    <p className="slider-hint">🔄 绕自身中心点旋转</p>
                   </div>
                 </div>
               ))}
@@ -184,9 +204,12 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
           <button
             onClick={handleAddPattern}
             className="add-pattern-btn"
-            disabled={patterns.length >= 8}
+            disabled={patterns.length >= 8 || processingId !== null}
+            style={{ opacity: processingId !== null ? 0.5 : 1 }}
           >
-            + 添加装饰图案 ({patterns.length}/8)
+            {processingId !== null 
+              ? '⏳ 处理中...' 
+              : `+ 添加装饰图案 (${patterns.length}/8)`}
           </button>
         </div>
       )}
