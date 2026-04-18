@@ -19,6 +19,13 @@ function ExportPanel({
     setIsExporting(true)
     try {
       await exportCanvas(canvasRef.current, format, resolution)
+      // 导出成功提示
+      const tipText = format === 'png' 
+        ? '✅ 已导出 PNG（透明背景）'
+        : format === 'svg'
+        ? '✅ 已导出 SVG（透明背景）'
+        : '✅ 已导出 JPG（白色背景）'
+      alert(tipText)
     } catch (error) {
       console.error('导出失败:', error)
       alert('导出失败，请重试')
@@ -36,13 +43,19 @@ function ExportPanel({
         <div className="option-group">
           <label className="option-label">格式</label>
           <div className="format-buttons">
-            {['png', 'jpg', 'svg'].map((fmt) => (
+            {[
+              { value: 'png', label: 'PNG', hint: '透明' },
+              { value: 'svg', label: 'SVG', hint: '透明' },
+              { value: 'jpg', label: 'JPG', hint: '白底' }
+            ].map((fmt) => (
               <button
-                key={fmt}
-                onClick={() => setFormat(fmt)}
-                className={`format-btn ${format === fmt ? 'active' : ''}`}
+                key={fmt.value}
+                onClick={() => setFormat(fmt.value)}
+                className={`format-btn ${format === fmt.value ? 'active' : ''}`}
+                title={`${fmt.label} - ${fmt.hint}背景`}
               >
-                {fmt.toUpperCase()}
+                <span>{fmt.label}</span>
+                <span className="format-hint">{fmt.hint}</span>
               </button>
             ))}
           </div>
@@ -62,6 +75,9 @@ function ExportPanel({
               </button>
             ))}
           </div>
+          <p className="resolution-hint">
+            分辨率：{800 * parseInt(resolution)}×{800 * parseInt(resolution)}px
+          </p>
         </div>
       </div>
 
@@ -76,6 +92,15 @@ function ExportPanel({
       {!centralPattern && (
         <p className="export-hint">请先上传中心图案</p>
       )}
+      
+      <div className="export-tips">
+        <p className="tip-title">📌 导出提示：</p>
+        <ul>
+          <li>PNG/SVG 为透明背景</li>
+          <li>JPG 为白色背景（JPG 不支持透明）</li>
+          <li>分辨率越高，文件越大</li>
+        </ul>
+      </div>
     </div>
   )
 }
