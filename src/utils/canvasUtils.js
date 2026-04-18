@@ -88,7 +88,6 @@ function drawCentralPattern(ctx, canvas, pattern, scale, rotation) {
   const centerY = canvas.height / 2
 
   const img = new Image()
-  img.crossOrigin = 'anonymous'
   img.onload = () => {
     ctx.save()
     ctx.translate(centerX, centerY)
@@ -108,6 +107,9 @@ function drawCentralPattern(ctx, canvas, pattern, scale, rotation) {
 
     ctx.restore()
   }
+  img.onerror = () => {
+    console.error('中心图案加载失败')
+  }
   img.src = pattern.processedSrc
 }
 
@@ -118,7 +120,6 @@ function drawDecorativePattern(ctx, canvas, pattern) {
   const radius = pattern.radius
 
   const img = new Image()
-  img.crossOrigin = 'anonymous'
   img.onload = () => {
     for (let i = 0; i < pattern.quantity; i++) {
       const angle = (angleStep * i + pattern.angle) * (Math.PI / 180)
@@ -144,53 +145,113 @@ function drawDecorativePattern(ctx, canvas, pattern) {
       ctx.restore()
     }
   }
+  img.onerror = () => {
+    console.error('装饰图案加载失败')
+  }
   img.src = pattern.processedSrc
 }
 
-// 移除背景变透明
+// 🔧 改进版：移除背景变透明
 export async function removeBackground(imageDataUrl) {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      const tempCanvas = document.createElement('canvas')
-      tempCanvas.width = img.width
-      tempCanvas.height = img.height
-      const ctx = tempCanvas.getContext('2d')
+  return new Promise((resolve, reject) => {
+    try {
+      const img = new Image()
       
-      ctx.drawImage(img, 0, 0)
-      const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
-      const data = imageData.data
-      
-      // 检测主要背景颜色
-      const backgroundColor = detectBackgroundColor(data)
-      
-      // 设置背景透明
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i]
-        const g = data[i + 1]
-        const b = data[i + 2]
-        
-        if (isColorSimilar(r, g, b, backgroundColor, 30)) {
-          data[i + 3] = 0
+      img.onload = () => {
+        try {
+          // 创建 canvas 进行处理
+          const tempCanvas = document.createElement('canvas')
+          tempCanvas.width = img.width
+          tempCanvas.height = img.height
+          const ctx = tempCanvas.getContext('2d', { willReadFrequently: true })
+          
+          // 绘制图片
+          ctx.drawImage(img, 0, 0)
+          
+          // 获取图像数据
+          const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
+          const data = imageData.data
+          
+          // ✅ 改进：动态检测背景颜色（四个角的平均值）
+          const backgroundColor = detectBackgroundColorFromCorners(data, tempCanvas.width, tempCanvas.height)
+          
+          console.log('检测到的背景颜色:', backgroundColor)
+          
+          // 设置背景透明
+          let transparentPixels = 0
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i]
+            const g = data[i + 1]
+            const b = data[i + 2]
+            
+            // ✅ 改进：更智能的颜色相似度判断
+            if (isColorSimilar(r, g, b, backgroundColor, 50)) {
+              data[i + 3] = 0 // 设置透明
+              transparentPixels++
+            }
+          }
+          
+          console.log(`已设置 ${transparentPixels} 个像素为透明`)
+          
+          ctx.putImageData(imageData, 0, 0)
+          const result = tempCanvas.toDataURL('image/png')
+          resolve(result)
+        } catch (error) {
+          console.error('Canvas 处理失败:', error)
+          reject(error)
         }
       }
       
-      ctx.putImageData(imageData, 0, 0)
-      resolve(tempCanvas.toDataURL('image/png'))
+      img.onerror = () => {
+        console.error('图片加载失败')
+        reject(new Error('图片加载失败'))
+      }
+      
+      // ✅ 关键：使用 dataURL 直接赋值（避免跨域问题）
+      img.src = imageDataUrl
+      
+    } catch (error) {
+      console.error('removeBackground 错误:', error)
+      reject(error)
     }
-    img.src = imageDataUrl
   })
 }
 
-function detectBackgroundColor(data) {
-  return { r: 255, g: 255, b: 255 }
+// ✅ 改进：从四个角检测背景颜色
+function detectBackgroundColorFromCorners(data, width, height) {
+  const pixelSize = 4
+  
+  // 获取四个角的颜色样本
+  const corners = [
+    { x: 5, y: 5 },           // 左上
+    { x: width - 5, y: 5 },   // 右上
+    { x: 5, y: height - 5 },  // 左下
+    { x: width - 5, y: height - 5 } // 右下
+  ]
+  
+  let rSum = 0, gSum = 0, bSum = 0
+  
+  corners.forEach(corner => {
+    const index = (corner.y * width + corner.x) * pixelSize
+    rSum += data[index]
+    gSum += data[index + 1]
+    bSum += data[index + 2]
+  })
+  
+  return {
+    r: Math.round(rSum / corners.length),
+    g: Math.round(gSum / corners.length),
+    b: Math.round(bSum / corners.length)
+  }
 }
 
-function isColorSimilar(r, g, b, targetColor, threshold = 30) {
+// ✅ 改进：颜色相似度判断
+function isColorSimilar(r, g, b, targetColor, threshold = 50) {
   const dr = Math.abs(r - targetColor.r)
   const dg = Math.abs(g - targetColor.g)
   const db = Math.abs(b - targetColor.b)
   
-  return dr < threshold && dg < threshold && db < threshold
+  // 返��总差值是否小于阈值
+  const totalDiff = dr + dg + db
+  return totalDiff < threshold * 3
 }
