@@ -17,14 +17,14 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
     
     const input = document.createElement('input')
     input.type = 'file'
-    input.accept = 'image/jpeg,image/png,image/svg+xml'
+    input.accept = 'image/jpeg,image/png,image/svg+xml,image/gif,image/webp'
     input.onchange = async (e) => {
       const file = e.target.files?.[0]
       if (!file) return
 
-      const validTypes = ['image/jpeg', 'image/png', 'image/svg+xml']
+      const validTypes = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/gif', 'image/webp']
       if (!validTypes.includes(file.type)) {
-        alert('仅支持 JPG、PNG、SVG 格式')
+        alert('仅支持 JPG、PNG、SVG、GIF、WebP 格式')
         return
       }
 
@@ -43,19 +43,18 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
           let originalSrc = event.target.result
           let processedSrc = originalSrc
 
-          // 如果启用透明背景且是 PNG，自动抠图
-          if (useTransparency && file.type === 'image/png') {
+          // ✅ 所有格式都可以自动抠图
+          if (useTransparency) {
             setProcessingStatus(prev => ({...prev, [newId]: '✨ 抠图处理中...'}))
-            console.log('装饰图案开始抠图处理...')
+            console.log(`装饰图案开始抠图处理 (${file.type})`)
             processedSrc = await removeBackground(originalSrc)
             setProcessingStatus(prev => ({...prev, [newId]: '✅ 抠图完成！'}))
             console.log('装饰图案抠图完成')
-          } else if (useTransparency && file.type !== 'image/png') {
-            setProcessingStatus(prev => ({...prev, [newId]: '📌 仅 PNG 支持自动透明'}))
           } else {
             setProcessingStatus(prev => ({...prev, [newId]: '✓ 上传成功'}))
           }
 
+          // ✅ 新增：朝向中心选择键，默认 false
           const newPattern = {
             id: newId,
             src: originalSrc,
@@ -65,12 +64,12 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
             radius: 150,
             angle: 0,
             scale: 100,
-            rotation: 0
+            rotation: 0,
+            faceCenter: false  // ✅ 新增：朝向中心标志
           }
           onPatternsChange([...patterns, newPattern])
           setExpandedPreview(newId)
 
-          // 延迟清除状态提示
           setTimeout(() => {
             setProcessingStatus(prev => {
               const newStatus = {...prev}
@@ -132,7 +131,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                 {useTransparency ? '✓ 自动透明背景' : '✗ 保留原背景'}
               </span>
             </label>
-            <p className="toggle-hint">PNG 自动抠图变透明</p>
+            <p className="toggle-hint">自动抠图去除背景</p>
           </div>
 
           {patterns.length === 0 ? (
@@ -174,6 +173,25 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                       <img src={pattern.processedSrc} alt="preview" className="preview-img" />
                     </div>
                   )}
+
+                  {/* ✅ 朝向中心选择键 */}
+                  <div className="face-center-toggle">
+                    <label className="toggle-label-small">
+                      <input
+                        type="checkbox"
+                        checked={pattern.faceCenter}
+                        onChange={(e) =>
+                          handleUpdatePattern(pattern.id, {
+                            faceCenter: e.target.checked
+                          })
+                        }
+                        className="toggle-input"
+                      />
+                      <span className="toggle-text-small">
+                        {pattern.faceCenter ? '🎯 朝向中心' : '🔄 自由旋转'}
+                      </span>
+                    </label>
+                  </div>
 
                   {/* 数量 */}
                   <div className="control-group">
@@ -268,7 +286,9 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                       }
                       className="slider"
                     />
-                    <p className="slider-hint">🔄 绕自身中心点旋转</p>
+                    <p className="slider-hint">
+                      {pattern.faceCenter ? '🎯 指向中心的旋转偏移' : '🔄 绕自身中心点旋转'}
+                    </p>
                   </div>
                 </div>
               ))}
