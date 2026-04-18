@@ -13,6 +13,44 @@
   letter-spacing: 0.5px;
 }
 
+/* 透明背景开关 */
+.transparency-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background-color: var(--bg-tertiary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--accent-color);
+}
+
+.toggle-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.toggle-hint {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-left: 26px;
+}
+
 /* 文件上传部分 */
 .upload-section {
   display: flex;
@@ -54,6 +92,35 @@
 .file-hint {
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+/* 预览区域 */
+.preview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 4px;
+  border: 1px solid var(--accent-color);
+}
+
+.preview-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-color);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin: 0;
+}
+
+.preview-image {
+  width: 100%;
+  height: 150px;
+  object-fit: contain;
+  background-color: #0a0e27;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
 }
 
 /* 控制组 */
