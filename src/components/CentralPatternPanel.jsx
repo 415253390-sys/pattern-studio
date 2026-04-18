@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { removeBackground } from '../utils/canvasUtils'
 import './CentralPatternPanel.css'
 
 function CentralPatternPanel({
@@ -9,8 +10,9 @@ function CentralPatternPanel({
   onRotationChange
 }) {
   const [fileName, setFileName] = useState('未选择文件')
+  const [isProcessing, setIsProcessing] = useState(false)
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -27,13 +29,29 @@ function CentralPatternPanel({
     }
 
     setFileName(file.name)
+    setIsProcessing(true)
+
     const reader = new FileReader()
-    reader.onload = (event) => {
-      onPatternUpload({
-        src: event.target.result,
-        name: file.name,
-        type: file.type
-      })
+    reader.onload = async (event) => {
+      try {
+        // 如果是 PNG，自动抠图移除背景
+        let processedSrc = event.target.result
+        
+        if (file.type === 'image/png') {
+          processedSrc = await removeBackground(event.target.result)
+        }
+
+        onPatternUpload({
+          src: processedSrc,
+          name: file.name,
+          type: file.type
+        })
+      } catch (error) {
+        console.error('处理图像失败:', error)
+        alert('处理图像失败，请重试')
+      } finally {
+        setIsProcessing(false)
+      }
     }
     reader.readAsDataURL(file)
   }
@@ -49,12 +67,18 @@ function CentralPatternPanel({
             type="file"
             accept="image/jpeg,image/png,image/svg+xml"
             onChange={handleFileUpload}
+            disabled={isProcessing}
             className="file-input"
           />
-          <span className="upload-btn">📁 上传图案</span>
+          <span className="upload-btn" style={{ opacity: isProcessing ? 0.5 : 1 }}>
+            {isProcessing ? '⏳ 处理中...' : '📁 上传图案'}
+          </span>
         </label>
         <p className="file-name">{fileName}</p>
         <p className="file-hint">JPG/PNG/SVG, 最大 5MB</p>
+        <p className="file-hint" style={{ color: '#10b981', marginTop: '4px' }}>
+          💡 PNG 图案会自动抠图变透明
+        </p>
       </div>
 
       {/* 缩放控制 */}
