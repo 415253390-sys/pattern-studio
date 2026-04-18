@@ -30,7 +30,6 @@ function drawGuideLines(ctx, canvas) {
   const centerX = canvas.width / 2
   const centerY = canvas.height / 2
 
-  // 绘制网格
   for (let x = 0; x <= canvas.width; x += gridSize) {
     ctx.beginPath()
     ctx.moveTo(x, 0)
@@ -45,7 +44,6 @@ function drawGuideLines(ctx, canvas) {
     ctx.stroke()
   }
 
-  // 绘制中心十字线（更亮的蓝色）
   ctx.strokeStyle = '#3b82f6'
   ctx.lineWidth = 1.5
   
@@ -59,7 +57,6 @@ function drawGuideLines(ctx, canvas) {
   ctx.lineTo(canvas.width, centerY)
   ctx.stroke()
 
-  // 绘制圆形参考线（装饰图案轨迹）
   ctx.strokeStyle = '#2563eb'
   ctx.lineWidth = 1
   ctx.setLineDash([4, 4])
@@ -72,7 +69,6 @@ function drawGuideLines(ctx, canvas) {
 
   ctx.setLineDash([])
 
-  // 绘制中心点（蓝色圆点）
   ctx.fillStyle = '#3b82f6'
   ctx.beginPath()
   ctx.arc(centerX, centerY, 6, 0, Math.PI * 2)
@@ -129,13 +125,10 @@ function drawDecorativePattern(ctx, canvas, pattern) {
       ctx.save()
       ctx.translate(x, y)
       
-      // ✅ 关键修改：支持朝向中心选择
       if (pattern.faceCenter) {
-        // 朝向中心：旋转角度指向中心
         const angleToCenter = Math.atan2(centerY - y, centerX - x)
         ctx.rotate(angleToCenter + (pattern.rotation * Math.PI) / 180)
       } else {
-        // 正常旋转
         ctx.rotate((pattern.rotation * Math.PI) / 180)
       }
 
@@ -160,8 +153,38 @@ function drawDecorativePattern(ctx, canvas, pattern) {
   img.src = pattern.processedSrc
 }
 
-// ✅ 强化版：移除背景变透明（支持所有格式）
-export async function removeBackground(imageDataUrl) {
+// ✅ 新增：色彩通道提取（用于吸管工具）
+export function extractImageColors(imageDataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
+        ctx.drawImage(img, 0, 0)
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        resolve(imageData)
+      } catch (error) {
+        reject(error)
+      }
+    }
+    img.onerror = () => reject(new Error('图片加载失败'))
+    img.src = imageDataUrl
+  })
+}
+
+// ✅ 核心：多目标颜色拾取 + 深度全局消除 + 羽化平滑
+export async function removeBackgroundAdvanced(imageDataUrl, options = {}) {
+  const {
+    targetColors = [],           // 选中的目标颜色数组
+    tolerance = 30,              // 容差值
+    useGlobalRemoval = true,     // 全局深度消除
+    featheringStrength = 1.0     // 羽化强度
+  } = options
+
   return new Promise((resolve, reject) => {
     try {
       const img = new Image()
@@ -173,90 +196,219 @@ export async function removeBackground(imageDataUrl) {
           tempCanvas.height = img.height
           const ctx = tempCanvas.getContext('2d', { willReadFrequently: true })
           
-          // 绘制图片
           ctx.drawImage(img, 0, 0)
-          
-          // 获取图像数据
           const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
           const data = imageData.data
           
-          console.log('开始背景移除处理...')
-          console.log('图片尺寸:', tempCanvas.width, 'x', tempCanvas.height)
+          console.log('=== 开始高级抠图处理 ===')
+          console.log('目标颜色数量:', targetColors.length)
+          console.log('容差值:', tolerance)
+          console.log('全局消除:', useGlobalRemoval)
           
-          // ✅ 改进：使用多种算法检测背景
-          const backgroundColor = smartDetectBackgroundColor(data, tempCanvas.width, tempCanvas.height)
-          console.log('检测到的背景颜色:', backgroundColor)
-          
-          // ✅ 改进：智能透明度处理
+          // 第一步：创建初始 Alpha 遮罩
+          const alphaMask = new Uint8Array(data.length / 4)
           let transparentPixels = 0
+          
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i]
             const g = data[i + 1]
             const b = data[i + 2]
-            const a = data[i + 3]
+            const pixelIndex = i / 4
             
-            // 跳过完全透明的像素
-            if (a === 0) {
-              continue
+            // 检查是否匹配任何目标颜色
+            let shouldRemove = false
+            
+            if (targetColors.length > 0) {
+              // 多目标颜色模式：匹配任何一个目标颜色
+              for (const targetColor of targetColors) {
+                if (colorDistance(r, g, b, targetColor, tolerance)) {
+                  shouldRemove = true
+                  break
+                }
+              }
+            } else {
+              // 自动检测模式：检测背景色
+              const bgColor = detectBackgroundColorSimple(data, tempCanvas.width, tempCanvas.height)
+              shouldRemove = colorDistance(r, g, b, bgColor, tolerance)
             }
             
-            // ✅ 使用多种颜色相似度判断
-            if (shouldRemovePixel(r, g, b, backgroundColor)) {
-              data[i + 3] = 0
-              transparentPixels++
-            }
+            alphaMask[pixelIndex] = shouldRemove ? 0 : 255
+            if (shouldRemove) transparentPixels++
           }
           
-          console.log(`已设置 ${transparentPixels} 个像素为透明 (总像素: ${data.length / 4})`)
+          console.log(`初始透明像素: ${transparentPixels}`)
+          
+          // 第二步：全局深度消除 - 穿透内部孤岛
+          if (useGlobalRemoval) {
+            console.log('执行全局深度消除...')
+            globalDepthRemoval(alphaMask, tempCanvas.width, tempCanvas.height, tolerance, data)
+          }
+          
+          // 第三步：羽化平滑 - 解决白边
+          console.log('执行羽化平滑算法...')
+          featheringSmoothing(alphaMask, tempCanvas.width, tempCanvas.height, featheringStrength, data)
+          
+          // 第四步：应用最终 Alpha 值
+          for (let i = 0; i < data.length; i += 4) {
+            const pixelIndex = i / 4
+            data[i + 3] = alphaMask[pixelIndex]
+          }
           
           ctx.putImageData(imageData, 0, 0)
           const result = tempCanvas.toDataURL('image/png')
+          console.log('=== 抠图完成 ===')
           resolve(result)
+          
         } catch (error) {
           console.error('Canvas 处理失败:', error)
           reject(error)
         }
       }
       
-      img.onerror = () => {
-        console.error('图片加载失败:', imageDataUrl.substring(0, 50))
-        reject(new Error('图片加载失败'))
-      }
-      
-      // 使用 dataURL 直接赋值
+      img.onerror = () => reject(new Error('图片加载失败'))
       img.src = imageDataUrl
       
     } catch (error) {
-      console.error('removeBackground 错误:', error)
+      console.error('removeBackgroundAdvanced 错误:', error)
       reject(error)
     }
   })
 }
 
-// ✅ 智能背景色检测：多种方法
-function smartDetectBackgroundColor(data, width, height) {
-  // 方法1：从四个角检测
-  const corners = getCornerColors(data, width, height)
+// ✅ 颜色距离计算（支持容差）
+function colorDistance(r, g, b, targetColor, tolerance) {
+  const dr = Math.abs(r - targetColor.r)
+  const dg = Math.abs(g - targetColor.g)
+  const db = Math.abs(b - targetColor.b)
   
-  // 方法2：从边缘检测
-  const edges = getEdgeColors(data, width, height)
-  
-  // 方法3：从直方图检测
-  const histogram = getHistogramPeak(data)
-  
-  // 综合判断：哪个颜色最接近背景
-  const allCandidates = [...corners, ...edges, histogram]
-  
-  // 返回出现最多的颜色
-  const mostCommonColor = findMostCommonColor(allCandidates)
-  console.log('检测方法 - 角: ', corners[0], '边缘: ', edges[0], '直方图: ', histogram, '最终:', mostCommonColor)
-  
-  return mostCommonColor
+  // 使用欧几里得距离
+  const distance = Math.sqrt(dr * dr + dg * dg + db * db)
+  return distance < tolerance * 3
 }
 
-// 从四个角获取颜色
-function getCornerColors(data, width, height) {
+// ✅ 全局深度消除：穿透内部孤岛
+function globalDepthRemoval(alphaMask, width, height, tolerance, imageData) {
+  const visited = new Uint8Array(alphaMask.length)
+  const queue = []
+  
+  // 从边缘开始找所有透明区域
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = y * width + x
+      
+      // 只检查边缘像素
+      if ((x === 0 || x === width - 1 || y === 0 || y === height - 1) && 
+          alphaMask[index] === 0 && !visited[index]) {
+        queue.push({ x, y })
+        visited[index] = 1
+      }
+    }
+  }
+  
+  // BFS 扩散：找到所有连通的透明区域
+  while (queue.length > 0) {
+    const { x, y } = queue.shift()
+    const directions = [
+      [0, 1], [1, 0], [0, -1], [-1, 0],  // 4连通
+      [1, 1], [1, -1], [-1, 1], [-1, -1] // 8连通
+    ]
+    
+    for (const [dx, dy] of directions) {
+      const nx = x + dx
+      const ny = y + dy
+      
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+        const index = ny * width + nx
+        
+        if (!visited[index]) {
+          visited[index] = 1
+          
+          // 如果是目标颜色，也将其标记为透明
+          if (alphaMask[index] === 0) {
+            queue.push({ x: nx, y: ny })
+          }
+        }
+      }
+    }
+  }
+  
+  // 更新 alphaMask：所有孤立的背景色也变透明
+  for (let i = 0; i < alphaMask.length; i++) {
+    if (visited[i] && alphaMask[i] === 0) {
+      alphaMask[i] = 0  // 确保透明
+    }
+  }
+  
+  console.log('全局深度消除完成')
+}
+
+// ✅ 羽化平滑算法：解决白边
+function featheringSmoothing(alphaMask, width, height, featheringStrength, imageData) {
+  const tempAlpha = new Uint8Array(alphaMask)
   const pixelSize = 4
+  
+  // 第一遍：检测边缘
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const index = y * width + x
+      const currentAlpha = alphaMask[index]
+      
+      // 只处理接近边界的像素（当前不透明，相邻有透明）
+      if (currentAlpha > 0 && currentAlpha < 255) {
+        const neighbors = [
+          alphaMask[index - 1],
+          alphaMask[index + 1],
+          alphaMask[index - width],
+          alphaMask[index + width],
+          alphaMask[index - width - 1],
+          alphaMask[index - width + 1],
+          alphaMask[index + width - 1],
+          alphaMask[index + width + 1]
+        ]
+        
+        // 计算邻域平均
+        const avgAlpha = neighbors.reduce((a, b) => a + b, 0) / neighbors.length
+        
+        // 羽化：使用二次曲线平滑过渡
+        if (Math.abs(currentAlpha - avgAlpha) > 10) {
+          const blended = Math.round(currentAlpha * 0.7 + avgAlpha * 0.3)
+          tempAlpha[index] = blended
+        }
+      } else if (currentAlpha === 255) {
+        // 不透明像素的边缘处理
+        const neighbors = [
+          alphaMask[index - 1],
+          alphaMask[index + 1],
+          alphaMask[index - width],
+          alphaMask[index + width]
+        ]
+        
+        // 如果有透明邻域，进行羽化
+        if (neighbors.some(a => a === 0)) {
+          const avgAlpha = neighbors.reduce((a, b) => a + b, 0) / neighbors.length
+          
+          // 容差 + 30 的二次曲线 Alpha 羽化
+          const tolerance = 30
+          const featherDistance = Math.max(0, 255 - avgAlpha)
+          const featherFactor = Math.pow(featherDistance / 255, 2) // 二次曲线
+          
+          const finalAlpha = Math.round(255 * (1 - featherFactor * featheringStrength * 0.5))
+          tempAlpha[index] = Math.max(200, finalAlpha) // 保留最少 200 的不透明度
+        }
+      }
+    }
+  }
+  
+  // 复制回 alphaMask
+  for (let i = 0; i < alphaMask.length; i++) {
+    alphaMask[i] = tempAlpha[i]
+  }
+  
+  console.log('羽化平滑完成')
+}
+
+// 简单背景检测
+function detectBackgroundColorSimple(data, width, height) {
   const corners = [
     { x: 5, y: 5 },
     { x: width - 5, y: 5 },
@@ -264,123 +416,19 @@ function getCornerColors(data, width, height) {
     { x: width - 5, y: height - 5 }
   ]
   
-  const colors = []
+  let rSum = 0, gSum = 0, bSum = 0
+  const pixelSize = 4
+  
   corners.forEach(corner => {
     const index = (corner.y * width + corner.x) * pixelSize
-    colors.push({
-      r: data[index],
-      g: data[index + 1],
-      b: data[index + 2]
-    })
+    rSum += data[index]
+    gSum += data[index + 1]
+    bSum += data[index + 2]
   })
   
-  return colors
-}
-
-// 从边缘获取颜色
-function getEdgeColors(data, width, height) {
-  const pixelSize = 4
-  const colors = []
-  
-  // 上边缘
-  for (let x = 10; x < width - 10; x += 20) {
-    const index = (5 * width + x) * pixelSize
-    colors.push({
-      r: data[index],
-      g: data[index + 1],
-      b: data[index + 2]
-    })
-  }
-  
-  // 下边缘
-  for (let x = 10; x < width - 10; x += 20) {
-    const index = ((height - 5) * width + x) * pixelSize
-    colors.push({
-      r: data[index],
-      g: data[index + 1],
-      b: data[index + 2]
-    })
-  }
-  
-  return colors.length > 0 ? colors : [{ r: 255, g: 255, b: 255 }]
-}
-
-// 从直方图获取颜色峰值
-function getHistogramPeak(data) {
-  const histogram = {}
-  
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i]
-    const g = data[i + 1]
-    const b = data[i + 2]
-    const key = `${r},${g},${b}`
-    histogram[key] = (histogram[key] || 0) + 1
-  }
-  
-  // 找出最常见的颜色（背景色通常是最常见的）
-  let maxCount = 0
-  let peakColor = { r: 255, g: 255, b: 255 }
-  
-  for (const [key, count] of Object.entries(histogram)) {
-    if (count > maxCount) {
-      maxCount = count
-      const [r, g, b] = key.split(',').map(Number)
-      peakColor = { r, g, b }
-    }
-  }
-  
-  return peakColor
-}
-
-// 找出最常见的颜色
-function findMostCommonColor(colors) {
-  if (colors.length === 0) return { r: 255, g: 255, b: 255 }
-  
-  const rSum = colors.reduce((sum, c) => sum + c.r, 0)
-  const gSum = colors.reduce((sum, c) => sum + c.g, 0)
-  const bSum = colors.reduce((sum, c) => sum + c.b, 0)
-  
   return {
-    r: Math.round(rSum / colors.length),
-    g: Math.round(gSum / colors.length),
-    b: Math.round(bSum / colors.length)
+    r: Math.round(rSum / corners.length),
+    g: Math.round(gSum / corners.length),
+    b: Math.round(bSum / corners.length)
   }
-}
-
-// ✅ 智能像素移除判断
-function shouldRemovePixel(r, g, b, backgroundColor) {
-  // 方法1：颜色距离
-  const colorDistance = Math.sqrt(
-    Math.pow(r - backgroundColor.r, 2) +
-    Math.pow(g - backgroundColor.g, 2) +
-    Math.pow(b - backgroundColor.b, 2)
-  )
-  
-  // 如果颜色距离小于阈值，认为是背景
-  if (colorDistance < 50) {
-    return true
-  }
-  
-  // 方法2：灰度值相似性（适用于灰色背景）
-  const rGray = Math.abs(r - g) < 10 && Math.abs(g - b) < 10
-  const bgGray = Math.abs(backgroundColor.r - backgroundColor.g) < 10 && 
-                 Math.abs(backgroundColor.g - backgroundColor.b) < 10
-  
-  if (rGray && bgGray && colorDistance < 60) {
-    return true
-  }
-  
-  // 方法3：亮度相似性（白色或黑色背景）
-  const brightness = (r + g + b) / 3
-  const bgBrightness = (backgroundColor.r + backgroundColor.g + backgroundColor.b) / 3
-  
-  if (Math.abs(brightness - bgBrightness) < 20 && bgBrightness > 200) {
-    return true // 白色背景
-  }
-  
-  if (Math.abs(brightness - bgBrightness) < 20 && bgBrightness < 50) {
-    return true // 黑色背景
-  }
-  
-  return false
 }
