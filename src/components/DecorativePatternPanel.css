@@ -391,3 +391,63 @@
   cursor: pointer;
   accent-color: var(--accent-color);
 }
+/* ✅ 朝向方向选择按钮组 */
+.face-direction-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(37, 99, 235, 0.1));
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.direction-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-color);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.direction-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.direction-btn {
+  flex: 1;
+  padding: 8px 6px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.direction-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+.direction-btn.active {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+}
+
+.direction-btn.active:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.6);
+}
