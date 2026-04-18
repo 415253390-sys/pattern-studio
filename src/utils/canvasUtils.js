@@ -1,18 +1,86 @@
 export function renderCanvas(canvas, { centralPattern, centralScale, centralRotation, decorativePatterns }) {
   const ctx = canvas.getContext('2d')
   
-  // 清空画布为透明
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  // 黑色背景
+  ctx.fillStyle = '#0a0e27'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  
+  // 绘制参考线（网格 + 圆形 + 中心点）
+  drawGuideLines(ctx, canvas)
 
   // 绘制中心图案
-  if (centralPattern) {
+  if (centralPattern && centralPattern.processedSrc) {
     drawCentralPattern(ctx, canvas, centralPattern, centralScale, centralRotation)
   }
 
   // 绘制装饰图案
   decorativePatterns.forEach(pattern => {
-    drawDecorativePattern(ctx, canvas, pattern)
+    if (pattern.processedSrc) {
+      drawDecorativePattern(ctx, canvas, pattern)
+    }
   })
+}
+
+// 绘制参考线：网格、圆形、中心点
+function drawGuideLines(ctx, canvas) {
+  ctx.strokeStyle = '#1e2b4a'
+  ctx.lineWidth = 1
+  
+  const gridSize = 50
+  const centerX = canvas.width / 2
+  const centerY = canvas.height / 2
+
+  // 绘制网格
+  for (let x = 0; x <= canvas.width; x += gridSize) {
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, canvas.height)
+    ctx.stroke()
+  }
+
+  for (let y = 0; y <= canvas.height; y += gridSize) {
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(canvas.width, y)
+    ctx.stroke()
+  }
+
+  // 绘制中心十字线（更亮的蓝色）
+  ctx.strokeStyle = '#3b82f6'
+  ctx.lineWidth = 1.5
+  
+  ctx.beginPath()
+  ctx.moveTo(centerX, 0)
+  ctx.lineTo(centerX, canvas.height)
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.moveTo(0, centerY)
+  ctx.lineTo(canvas.width, centerY)
+  ctx.stroke()
+
+  // 绘制圆形参考线（装饰图案轨迹）
+  ctx.strokeStyle = '#2563eb'
+  ctx.lineWidth = 1
+  ctx.setLineDash([4, 4])
+
+  for (let radius = 50; radius <= 400; radius += 50) {
+    ctx.beginPath()
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+
+  ctx.setLineDash([])
+
+  // 绘制中心点（蓝色圆点）
+  ctx.fillStyle = '#3b82f6'
+  ctx.beginPath()
+  ctx.arc(centerX, centerY, 6, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = '#60a5fa'
+  ctx.lineWidth = 2
+  ctx.stroke()
 }
 
 function drawCentralPattern(ctx, canvas, pattern, scale, rotation) {
@@ -40,7 +108,7 @@ function drawCentralPattern(ctx, canvas, pattern, scale, rotation) {
 
     ctx.restore()
   }
-  img.src = pattern.src
+  img.src = pattern.processedSrc
 }
 
 function drawDecorativePattern(ctx, canvas, pattern) {
@@ -53,23 +121,18 @@ function drawDecorativePattern(ctx, canvas, pattern) {
   img.crossOrigin = 'anonymous'
   img.onload = () => {
     for (let i = 0; i < pattern.quantity; i++) {
-      // 计算圆形阵列位置，轴向中心点
       const angle = (angleStep * i + pattern.angle) * (Math.PI / 180)
       const x = centerX + Math.cos(angle) * radius
       const y = centerY + Math.sin(angle) * radius
 
       ctx.save()
-      
-      // 移动到该图案的中心点
       ctx.translate(x, y)
-      // 旋转该图案
       ctx.rotate((pattern.rotation * Math.PI) / 180)
 
       const scaleFactor = pattern.scale / 100
       const displayWidth = img.width * scaleFactor
       const displayHeight = img.height * scaleFactor
 
-      // 从中心点绘制（关键：轴向中心）
       ctx.drawImage(
         img,
         -displayWidth / 2,
@@ -81,29 +144,25 @@ function drawDecorativePattern(ctx, canvas, pattern) {
       ctx.restore()
     }
   }
-  img.src = pattern.src
+  img.src = pattern.processedSrc
 }
 
-// 获取图片并移除背景（白色或单色背景变透明）
+// 移除背景变透明
 export async function removeBackground(imageDataUrl) {
   return new Promise((resolve) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
-      // 创建临时 canvas 进行处理
       const tempCanvas = document.createElement('canvas')
       tempCanvas.width = img.width
       tempCanvas.height = img.height
       const ctx = tempCanvas.getContext('2d')
       
-      // 绘制原图
       ctx.drawImage(img, 0, 0)
-      
-      // 获取图像数据
       const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height)
       const data = imageData.data
       
-      // 检测主要背景颜色（通常是白色或透明）
+      // 检测主要背景颜色
       const backgroundColor = detectBackgroundColor(data)
       
       // 设置背景透明
@@ -111,11 +170,9 @@ export async function removeBackground(imageDataUrl) {
         const r = data[i]
         const g = data[i + 1]
         const b = data[i + 2]
-        const a = data[i + 3]
         
-        // 如果颜色接近背景色，设置为透明
         if (isColorSimilar(r, g, b, backgroundColor, 30)) {
-          data[i + 3] = 0 // 完全透明
+          data[i + 3] = 0
         }
       }
       
@@ -126,14 +183,10 @@ export async function removeBackground(imageDataUrl) {
   })
 }
 
-// 检测背景颜色（通常是四个角的颜色平均值）
 function detectBackgroundColor(data) {
-  // 简化：假设背景是白色或浅色
-  // 这里返回白色 RGB(255, 255, 255)
   return { r: 255, g: 255, b: 255 }
 }
 
-// 判断颜色是否相似
 function isColorSimilar(r, g, b, targetColor, threshold = 30) {
   const dr = Math.abs(r - targetColor.r)
   const dg = Math.abs(g - targetColor.g)
