@@ -125,10 +125,17 @@ function drawDecorativePattern(ctx, canvas, pattern) {
       ctx.save()
       ctx.translate(x, y)
       
-      if (pattern.faceCenter) {
+      // ✅ 核心修改：底部朝向中心点
+      if (pattern.faceDirection === 'center') {
+        // 底部朝向中心：旋转 180° + 指向中心的角度
+        const angleToCenter = Math.atan2(centerY - y, centerX - x)
+        ctx.rotate(angleToCenter + Math.PI + (pattern.rotation * Math.PI) / 180)
+      } else if (pattern.faceDirection === 'top') {
+        // 顶部朝向中心：指向中心的角度
         const angleToCenter = Math.atan2(centerY - y, centerX - x)
         ctx.rotate(angleToCenter + (pattern.rotation * Math.PI) / 180)
       } else {
+        // 自由旋转：不朝向中心
         ctx.rotate((pattern.rotation * Math.PI) / 180)
       }
 
@@ -152,8 +159,6 @@ function drawDecorativePattern(ctx, canvas, pattern) {
   }
   img.src = pattern.processedSrc
 }
-
-// ✅ 新增：色彩通道提取（用于吸管工具）
 export function extractImageColors(imageDataUrl) {
   return new Promise((resolve, reject) => {
     const img = new Image()
