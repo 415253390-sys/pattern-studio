@@ -20,9 +20,10 @@ function CentralPatternPanel({
     const file = e.target.files?.[0]
     if (!file) return
 
-    const validTypes = ['image/jpeg', 'image/png', 'image/svg+xml']
+    // ✅ 支持所有图片格式
+    const validTypes = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/gif', 'image/webp']
     if (!validTypes.includes(file.type)) {
-      alert('仅支持 JPG、PNG、SVG 格式')
+      alert('仅支持 JPG、PNG、SVG、GIF、WebP 格式')
       return
     }
 
@@ -42,19 +43,17 @@ function CentralPatternPanel({
         let originalSrc = event.target.result
         let processedSrc = originalSrc
 
-        // 如果启用透明背景且是 PNG，自动抠图
-        if (useTransparency && file.type === 'image/png') {
+        // ✅ 所有格式都可以自动抠图
+        if (useTransparency) {
           setProcessingStatus('✨ 抠图处理中...')
-          console.log('开始抠图处理...')
+          console.log(`开始抠图处理 (${file.type})`)
           processedSrc = await removeBackground(originalSrc)
           setProcessingStatus('✅ 抠图完成！')
-        } else if (useTransparency && file.type !== 'image/png') {
-          setProcessingStatus('📌 仅 PNG 支持自动透明处理')
+          console.log('抠图完成')
         } else {
           setProcessingStatus('✓ 上传成功')
         }
 
-        // 延迟一下再显示预览（让用户��到处理状态）
         setTimeout(() => {
           setPreviewImage(processedSrc)
           setShowPreview(true)
@@ -95,7 +94,7 @@ function CentralPatternPanel({
             {useTransparency ? '✓ 自动透明背景' : '✗ 保留原背景'}
           </span>
         </label>
-        <p className="toggle-hint">PNG 自动抠图变透明</p>
+        <p className="toggle-hint">自动抠图去除背景</p>
       </div>
 
       {/* 文件上传 */}
@@ -103,7 +102,7 @@ function CentralPatternPanel({
         <label className="file-input-label">
           <input
             type="file"
-            accept="image/jpeg,image/png,image/svg+xml"
+            accept="image/jpeg,image/png,image/svg+xml,image/gif,image/webp"
             onChange={handleFileUpload}
             disabled={isProcessing}
             className="file-input"
@@ -113,7 +112,7 @@ function CentralPatternPanel({
           </span>
         </label>
         <p className="file-name">{fileName}</p>
-        <p className="file-hint">JPG/PNG/SVG, 最大 5MB</p>
+        <p className="file-hint">JPG/PNG/SVG/GIF/WebP, 最大 5MB</p>
         {processingStatus && (
           <p className="processing-status">{processingStatus}</p>
         )}
