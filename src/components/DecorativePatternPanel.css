@@ -28,6 +28,38 @@
   gap: 12px;
 }
 
+/* 透明背景开关 */
+.transparency-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background-color: var(--bg-tertiary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent-color);
+}
+
+.toggle-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 .empty-text {
   font-size: 12px;
   color: var(--text-secondary);
@@ -41,7 +73,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 500px;
+  max-height: 600px;
   overflow-y: auto;
 }
 
@@ -72,23 +104,55 @@
   flex: 1;
 }
 
+.pattern-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.preview-btn,
 .remove-btn {
   width: 24px;
   height: 24px;
   border: none;
-  background-color: var(--danger-color);
-  color: white;
   border-radius: 3px;
   cursor: pointer;
   font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+}
+
+.preview-btn {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+.preview-btn:hover {
+  background-color: var(--accent-hover);
+}
+
+.remove-btn {
+  background-color: var(--danger-color);
+  color: white;
 }
 
 .remove-btn:hover {
   opacity: 0.8;
+}
+
+/* 预览展开 */
+.preview-expanded {
+  padding: 8px;
+  background-color: #0a0e27;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+}
+
+.preview-img {
+  width: 100%;
+  height: 120px;
+  object-fit: contain;
 }
 
 .control-group {
@@ -177,7 +241,6 @@
   cursor: not-allowed;
 }
 
-/* Scrollbar for patterns list */
 .patterns-list::-webkit-scrollbar {
   width: 4px;
 }
