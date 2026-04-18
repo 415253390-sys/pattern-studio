@@ -14,6 +14,7 @@ function CentralPatternPanel({
   const [showPreview, setShowPreview] = useState(false)
   const [previewImage, setPreviewImage] = useState(null)
   const [useTransparency, setUseTransparency] = useState(true)
+  const [processingStatus, setProcessingStatus] = useState('')
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -33,6 +34,7 @@ function CentralPatternPanel({
     setFileName(file.name)
     setIsProcessing(true)
     setShowPreview(false)
+    setProcessingStatus('上传中...')
 
     const reader = new FileReader()
     reader.onload = async (event) => {
@@ -40,13 +42,24 @@ function CentralPatternPanel({
         let originalSrc = event.target.result
         let processedSrc = originalSrc
 
-        // 如果启用透明背景，自动抠图
+        // 如果启用透明背景且是 PNG，自动抠图
         if (useTransparency && file.type === 'image/png') {
+          setProcessingStatus('✨ 抠图处理中...')
+          console.log('开始抠图处理...')
           processedSrc = await removeBackground(originalSrc)
+          setProcessingStatus('✅ 抠图完成！')
+        } else if (useTransparency && file.type !== 'image/png') {
+          setProcessingStatus('📌 仅 PNG 支持自动透明处理')
+        } else {
+          setProcessingStatus('✓ 上传成功')
         }
 
-        setPreviewImage(processedSrc)
-        setShowPreview(true)
+        // 延迟一下再显示预览（让用户��到处理状态）
+        setTimeout(() => {
+          setPreviewImage(processedSrc)
+          setShowPreview(true)
+          setProcessingStatus('')
+        }, 500)
 
         onPatternUpload({
           src: originalSrc,
@@ -56,7 +69,8 @@ function CentralPatternPanel({
         })
       } catch (error) {
         console.error('处理图像失败:', error)
-        alert('处理图像失败，请重试')
+        setProcessingStatus('❌ 处理失败')
+        alert('处理图像失败: ' + error.message)
       } finally {
         setIsProcessing(false)
       }
@@ -100,12 +114,15 @@ function CentralPatternPanel({
         </label>
         <p className="file-name">{fileName}</p>
         <p className="file-hint">JPG/PNG/SVG, 最大 5MB</p>
+        {processingStatus && (
+          <p className="processing-status">{processingStatus}</p>
+        )}
       </div>
 
       {/* 预览区域 */}
       {showPreview && previewImage && (
         <div className="preview-section">
-          <h4 className="preview-title">抠图预览</h4>
+          <h4 className="preview-title">✨ 抠图预览</h4>
           <img src={previewImage} alt="preview" className="preview-image" />
         </div>
       )}
