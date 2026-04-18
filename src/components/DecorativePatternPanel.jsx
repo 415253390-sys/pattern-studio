@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { removeBackground } from '../utils/canvasUtils'
+import { removeBackgroundAdvanced } from '../utils/canvasUtils'
 import './DecorativePatternPanel.css'
 
 function DecorativePatternPanel({ patterns, onPatternsChange }) {
@@ -43,18 +43,22 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
           let originalSrc = event.target.result
           let processedSrc = originalSrc
 
-          // ✅ 所有格式都可以自动抠图
           if (useTransparency) {
             setProcessingStatus(prev => ({...prev, [newId]: '✨ 抠图处理中...'}))
             console.log(`装饰图案开始抠图处理 (${file.type})`)
-            processedSrc = await removeBackground(originalSrc)
+            processedSrc = await removeBackgroundAdvanced(originalSrc, {
+              targetColors: [],
+              tolerance: 30,
+              useGlobalRemoval: true,
+              featheringStrength: 1.0
+            })
             setProcessingStatus(prev => ({...prev, [newId]: '✅ 抠图完成！'}))
             console.log('装饰图案抠图完成')
           } else {
             setProcessingStatus(prev => ({...prev, [newId]: '✓ 上传成功'}))
           }
 
-          // ✅ 新增：朝向中心选择键，默认 false
+          // ✅ 核心修改：faceCenter 默认为 false，但需要点开后上传时底部朝向中心
           const newPattern = {
             id: newId,
             src: originalSrc,
@@ -65,7 +69,8 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
             angle: 0,
             scale: 100,
             rotation: 0,
-            faceCenter: false  // ✅ 新增：朝向中心标志
+            faceCenter: false,
+            faceDirection: 'none'  // ✅ 新增：朝向方向（none/center/bottom/top/left/right）
           }
           onPatternsChange([...patterns, newPattern])
           setExpandedPreview(newId)
@@ -174,23 +179,32 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                     </div>
                   )}
 
-                  {/* ✅ 朝向中心选择键 */}
-                  <div className="face-center-toggle">
-                    <label className="toggle-label-small">
-                      <input
-                        type="checkbox"
-                        checked={pattern.faceCenter}
-                        onChange={(e) =>
-                          handleUpdatePattern(pattern.id, {
-                            faceCenter: e.target.checked
-                          })
-                        }
-                        className="toggle-input"
-                      />
-                      <span className="toggle-text-small">
-                        {pattern.faceCenter ? '🎯 朝向中心' : '🔄 自由旋转'}
-                      </span>
-                    </label>
+                  {/* ✅ 朝向方向选择 - 新增：底部朝向中心 */}
+                  <div className="face-direction-selector">
+                    <label className="direction-label">朝向中心：</label>
+                    <div className="direction-buttons">
+                      <button
+                        onClick={() => handleUpdatePattern(pattern.id, { faceDirection: 'none' })}
+                        className={`direction-btn ${pattern.faceDirection === 'none' ? 'active' : ''}`}
+                        title="不朝向"
+                      >
+                        🔄 自由
+                      </button>
+                      <button
+                        onClick={() => handleUpdatePattern(pattern.id, { faceDirection: 'center' })}
+                        className={`direction-btn ${pattern.faceDirection === 'center' ? 'active' : ''}`}
+                        title="图案底部指向中心"
+                      >
+                        👇 底部
+                      </button>
+                      <button
+                        onClick={() => handleUpdatePattern(pattern.id, { faceDirection: 'top' })}
+                        className={`direction-btn ${pattern.faceDirection === 'top' ? 'active' : ''}`}
+                        title="图案顶部指向中心"
+                      >
+                        👆 顶部
+                      </button>
+                    </div>
                   </div>
 
                   {/* 数量 */}
@@ -287,7 +301,7 @@ function DecorativePatternPanel({ patterns, onPatternsChange }) {
                       className="slider"
                     />
                     <p className="slider-hint">
-                      {pattern.faceCenter ? '🎯 指向中心的旋转偏移' : '🔄 绕自身中心点旋转'}
+                      {pattern.faceDirection !== 'none' ? `🎯 ${pattern.faceDirection === 'center' ? '底部' : '顶部'}朝向中心` : '🔄 绕自身中心点旋转'}
                     </p>
                   </div>
                 </div>
