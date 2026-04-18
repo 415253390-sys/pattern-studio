@@ -11,12 +11,14 @@ function CentralPatternPanel({
 }) {
   const [fileName, setFileName] = useState('未选择文件')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewImage, setPreviewImage] = useState(null)
+  const [useTransparency, setUseTransparency] = useState(true)
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // 验证文件类型和大小
     const validTypes = ['image/jpeg', 'image/png', 'image/svg+xml']
     if (!validTypes.includes(file.type)) {
       alert('仅支持 JPG、PNG、SVG 格式')
@@ -30,19 +32,25 @@ function CentralPatternPanel({
 
     setFileName(file.name)
     setIsProcessing(true)
+    setShowPreview(false)
 
     const reader = new FileReader()
     reader.onload = async (event) => {
       try {
-        // 如果是 PNG，自动抠图移除背景
-        let processedSrc = event.target.result
-        
-        if (file.type === 'image/png') {
-          processedSrc = await removeBackground(event.target.result)
+        let originalSrc = event.target.result
+        let processedSrc = originalSrc
+
+        // 如果启用透明背景，自动抠图
+        if (useTransparency && file.type === 'image/png') {
+          processedSrc = await removeBackground(originalSrc)
         }
 
+        setPreviewImage(processedSrc)
+        setShowPreview(true)
+
         onPatternUpload({
-          src: processedSrc,
+          src: originalSrc,
+          processedSrc: processedSrc,
           name: file.name,
           type: file.type
         })
@@ -60,6 +68,22 @@ function CentralPatternPanel({
     <div className="central-pattern-panel">
       <h3 className="panel-title">中心图案</h3>
 
+      {/* 透明背景开关 */}
+      <div className="transparency-toggle">
+        <label className="toggle-label">
+          <input
+            type="checkbox"
+            checked={useTransparency}
+            onChange={(e) => setUseTransparency(e.target.checked)}
+            className="toggle-input"
+          />
+          <span className="toggle-text">
+            {useTransparency ? '✓ 自动透明背景' : '✗ 保留原背景'}
+          </span>
+        </label>
+        <p className="toggle-hint">PNG 自动抠图变透明</p>
+      </div>
+
       {/* 文件上传 */}
       <div className="upload-section">
         <label className="file-input-label">
@@ -76,10 +100,15 @@ function CentralPatternPanel({
         </label>
         <p className="file-name">{fileName}</p>
         <p className="file-hint">JPG/PNG/SVG, 最大 5MB</p>
-        <p className="file-hint" style={{ color: '#10b981', marginTop: '4px' }}>
-          💡 PNG 图案会自动抠图变透明
-        </p>
       </div>
+
+      {/* 预览区域 */}
+      {showPreview && previewImage && (
+        <div className="preview-section">
+          <h4 className="preview-title">抠图预览</h4>
+          <img src={previewImage} alt="preview" className="preview-image" />
+        </div>
+      )}
 
       {/* 缩放控制 */}
       <div className="control-group">
