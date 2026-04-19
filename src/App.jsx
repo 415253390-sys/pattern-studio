@@ -48,6 +48,7 @@ const processBackgroundRemoval = async (imgObj, config) => {
 
   let targetColors = [...pickColors];
   if (targetColors.length === 0) {
+    // 自动检测左上角边缘作为背景色
     targetColors.push([data[0], data[1], data[2]]);
   }
 
@@ -129,18 +130,18 @@ const Slider = ({ label, value, min, max, onChange, unit = '' }) => (
       max={max}
       value={value}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+      className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
     />
   </div>
 );
 
-const Toggle = ({ checked, onChange, label }) => (
+const Toggle = ({ checked, onChange, label, activeColor = 'bg-blue-500' }) => (
   <div className="flex items-center justify-between py-2 mt-1">
-    <span className="text-xs text-zinc-300 font-medium">{label}</span>
+    <span className="text-xs text-zinc-300 font-medium flex items-center gap-1.5">{label}</span>
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${checked ? 'bg-blue-500' : 'bg-zinc-700'}`}
+      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${checked ? activeColor : 'bg-zinc-700'}`}
     >
       <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${checked ? 'translate-x-4' : 'translate-x-1'}`} />
     </button>
@@ -177,6 +178,7 @@ export default function App() {
   const [decorations, setDecorations] = useState([]); 
   const [exportRes, setExportRes] = useState(1);
   const [exportFormat, setExportFormat] = useState('png');
+  const [exportTransparent, setExportTransparent] = useState(true); // 透明背景导出设置
   
   // Interaction State
   const [activeDrag, setActiveDrag] = useState(null);
@@ -222,6 +224,7 @@ export default function App() {
     const center = size / 2;
 
     if (!isExport) {
+      // Editor background
       ctx.fillStyle = '#0b1121';
       ctx.fillRect(0, 0, size, size);
 
@@ -254,11 +257,12 @@ export default function App() {
       ctx.fillStyle = '#3b82f6'; 
       ctx.fill();
     } else {
-      ctx.fillStyle = exportFormat === 'png' ? 'transparent' : '#ffffff';
-      if (exportFormat === 'jpg') {
+      // Export mode background behavior
+      if (exportFormat === 'jpg' || !exportTransparent) {
+        ctx.fillStyle = '#0b1121';
         ctx.fillRect(0, 0, size, size);
       } else {
-        ctx.clearRect(0, 0, size, size);
+        ctx.clearRect(0, 0, size, size); // Transparent for PNG/SVG
       }
     }
 
@@ -347,7 +351,7 @@ export default function App() {
          }
       }
     }
-  }, [centerImage, decorations, exportFormat, hoveredRingId, activeDrag, snapData]);
+  }, [centerImage, decorations, exportFormat, exportTransparent, hoveredRingId, activeDrag, snapData]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -363,15 +367,21 @@ export default function App() {
       if (!file) return;
       const dataUrl = await readFileAsDataURL(file);
       const img = await loadImage(dataUrl);
+
+      // Default background removal configs
+      const initConfig = { tolerance: 60, global: true, pickColors: [] };
+      const processed = await processBackgroundRemoval(img, initConfig);
+
       setCenterImage({ 
         id: Date.now().toString(), 
+        originalFile: file,
         originalImg: img, 
         originalDataUrl: dataUrl,
-        img, 
-        dataUrl, 
+        img: processed.img, 
+        dataUrl: processed.dataUrl, 
         scale: 100, 
         rotation: 0,
-        removeBg: false,
+        removeBg: true, // 默认开启智能抠图
         bgTolerance: 60,
         bgGlobal: true,
         bgPickColors: []
@@ -401,12 +411,22 @@ export default function App() {
       for (const file of files) {
         const dataUrl = await readFileAsDataURL(file);
         const img = await loadImage(dataUrl);
+
+        // Default background removal configs
+        const initConfig = { tolerance: 60, global: true, pickColors: [] };
+        const processed = await processBackgroundRemoval(img, initConfig);
+
         newDecs.push({
           id: Date.now().toString() + Math.random(),
-          originalImg: img, originalDataUrl: dataUrl,
-          img, dataUrl, count: 4, radius: 200, angleOffset: 0, scale: 50, rotation: 0,
-          faceCenter: false, // 新增：是否朝向中心点
-          removeBg: false, bgTolerance: 60, bgGlobal: true, bgPickColors: []
+          originalFile: file,
+          originalImg: img, 
+          originalDataUrl: dataUrl,
+          img: processed.img, 
+          dataUrl: processed.dataUrl, 
+          count: 4, radius: 200, angleOffset: 0, scale: 50, rotation: 0,
+          faceCenter: false, 
+          removeBg: true, // 默认开启智能抠图
+          bgTolerance: 60, bgGlobal: true, bgPickColors: []
         });
       }
       setDecorations([...decorations, ...newDecs].slice(0, 8));
@@ -540,7 +560,11 @@ export default function App() {
     const center = size / 2;
     
     let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
-    svgContent += `<rect width="100%" height="100%" fill="${exportFormat === 'png' ? 'transparent' : '#ffffff'}"/>`;
+    if (exportFormat === 'jpg' || !exportTransparent) {
+        svgContent += `<rect width="100%" height="100%" fill="#0b1121"/>`;
+    } else {
+        svgContent += `<rect width="100%" height="100%" fill="transparent"/>`;
+    }
 
     if (centerImage) {
       const w = centerImage.img.width * (centerImage.scale / 100) * exportRes;
@@ -608,7 +632,7 @@ export default function App() {
       <div className="w-80 bg-zinc-900 border-r border-zinc-800 flex flex-col z-10 shadow-2xl overflow-y-auto custom-scrollbar">
         <div className="p-4 border-b border-zinc-800 bg-zinc-900/95 sticky top-0 backdrop-blur-md z-20">
           <h1 className="text-sm font-bold text-white flex items-center gap-2">
-            <Layers className="text-blue-500" size={18} />
+            <Layers className="text-purple-500" size={18} />
             Pattern Studio
           </h1>
         </div>
@@ -617,14 +641,14 @@ export default function App() {
           {centerImage ? (
             <div className="space-y-1">
               <div 
-                className={`relative group rounded-lg overflow-hidden border transition-all h-32 flex items-center justify-center bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAAXNSR0IArs4c6QAAACVJREFUKFNjZCASMDKgAnv37v3PBEWwYhQxqmBkYGBgYIQrAAgwAF2VAiB+K8e/AAAAAElFTkSuQmCC')] ${centerImage.removeBg ? 'cursor-crosshair border-blue-500 ring-2 ring-blue-500/20' : 'border-zinc-700 bg-zinc-800'}`}
+                className={`relative group rounded-lg overflow-hidden border transition-all h-32 flex items-center justify-center bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAAXNSR0IArs4c6QAAACVJREFUKFNjZCASMDKgAnv37v3PBEWwYhQxqmBkYGBgYIQrAAgwAF2VAiB+K8e/AAAAAElFTkSuQmCC')] ${centerImage.removeBg ? 'cursor-crosshair border-purple-500 ring-2 ring-purple-500/20' : 'border-zinc-700 bg-zinc-800'}`}
                 onClick={(e) => handlePreviewClick(e, centerImage, true)}
               >
                  <img src={centerImage.dataUrl} alt="center" className="max-h-full max-w-full object-contain p-2 drop-shadow-xl pointer-events-none" />
                  
                  {/* Tips Overlay */}
                  {centerImage.removeBg && (
-                    <div className="absolute bottom-0 inset-x-0 bg-blue-900/80 backdrop-blur text-[10px] text-blue-100 py-1 text-center font-medium border-t border-blue-500/50 pointer-events-none">
+                    <div className="absolute bottom-0 inset-x-0 bg-purple-900/80 backdrop-blur text-[10px] text-purple-100 py-1 text-center font-medium border-t border-purple-500/50 pointer-events-none">
                       点击图像吸取要抠除的背景色
                     </div>
                  )}
@@ -639,22 +663,15 @@ export default function App() {
 
               {/* Advanced BG Removal Controls */}
               <div className="py-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-400 font-medium flex items-center gap-1.5">
-                    <Wand2 size={13} className={centerImage.removeBg ? "text-blue-400" : "text-zinc-500"} /> 
-                    自动抠图提取
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleCenterBgChange({ removeBg: !centerImage.removeBg })}
-                    className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${centerImage.removeBg ? 'bg-blue-500' : 'bg-zinc-700'}`}
-                  >
-                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${centerImage.removeBg ? 'translate-x-4' : 'translate-x-1'}`} />
-                  </button>
-                </div>
+                <Toggle 
+                  label={<><Wand2 size={13} className={centerImage.removeBg ? "text-purple-400" : "text-zinc-500"} /> 自动抠图提取</>}
+                  checked={centerImage.removeBg} 
+                  onChange={(val) => handleCenterBgChange({ removeBg: val })}
+                  activeColor="bg-purple-500"
+                />
                 
                 {centerImage.removeBg && (
-                  <div className="mt-3 p-3 bg-zinc-950/50 rounded-lg border border-zinc-800/80 space-y-3 relative">
+                  <div className="mt-2 p-3 bg-zinc-950/50 rounded-lg border border-zinc-800/80 space-y-3 relative">
                     <div className="flex items-center justify-between mb-2">
                        <span className="text-xs text-zinc-400 flex items-center gap-1"><Pipette size={12}/> 已吸取颜色</span>
                        {centerImage.bgPickColors?.length > 0 && (
@@ -664,10 +681,10 @@ export default function App() {
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {centerImage.bgPickColors?.length > 0 ? centerImage.bgPickColors.map((color, i) => (
                         <div key={i} className="w-5 h-5 rounded-full border border-zinc-600 shadow-inner" style={{ backgroundColor: `rgb(${color[0]},${color[1]},${color[2]})` }} />
-                      )) : <span className="text-[10px] text-zinc-600 italic">默认边缘识别 (点击图像可吸取灰框/黑底等多重颜色)</span>}
+                      )) : <span className="text-[10px] text-zinc-600 italic">默认边缘智能识别 (可手动点击灰框/黑底)</span>}
                     </div>
 
-                    <Toggle label="全局穿透抠图 (清理内部孤岛)" checked={centerImage.bgGlobal} onChange={(val) => handleCenterBgChange({ bgGlobal: val })} />
+                    <Toggle label="全局穿透抠图 (清理内部孤岛)" checked={centerImage.bgGlobal} onChange={(val) => handleCenterBgChange({ bgGlobal: val })} activeColor="bg-purple-500" />
                     <Slider label="抠除容差 (消除白边锯齿)" value={centerImage.bgTolerance} min={0} max={150} onChange={(val) => handleCenterBgChange({ bgTolerance: val })} />
                   </div>
                 )}
@@ -681,7 +698,7 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-zinc-700 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-blue-500/5 transition-all">
+            <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-zinc-700 rounded-lg cursor-pointer hover:border-purple-500 hover:bg-purple-500/5 transition-all">
               <Upload size={24} className="text-zinc-500 mb-2" />
               <span className="text-xs text-zinc-500 font-medium">点击上传中心图案</span>
               <span className="text-[10px] text-zinc-600 mt-1">JPG / PNG / SVG &lt; 5MB</span>
@@ -702,14 +719,14 @@ export default function App() {
             {decorations.map((dec, index) => (
               <div 
                 key={dec.id} 
-                className={`p-3 bg-zinc-950 rounded-lg border transition-colors duration-200 ${hoveredRingId === dec.id || activeDrag?.id === dec.id ? 'border-blue-500' : 'border-zinc-800'}`}
+                className={`p-3 bg-zinc-950 rounded-lg border transition-colors duration-200 ${hoveredRingId === dec.id || activeDrag?.id === dec.id ? 'border-purple-500' : 'border-zinc-800'}`}
                 onMouseEnter={() => setHoveredRingId(dec.id)}
                 onMouseLeave={() => setHoveredRingId(null)}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div 
-                       className={`w-10 h-10 rounded border flex items-center justify-center overflow-hidden bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAAXNSR0IArs4c6QAAACVJREFUKFNjZCASMDKgAnv37v3PBEWwYhQxqmBkYGBgYIQrAAgwAF2VAiB+K8e/AAAAAElFTkSuQmCC')] ${dec.removeBg ? 'cursor-crosshair border-blue-500 ring-1 ring-blue-500' : 'border-zinc-700 bg-zinc-800'}`}
+                       className={`w-10 h-10 rounded border flex items-center justify-center overflow-hidden bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAAXNSR0IArs4c6QAAACVJREFUKFNjZCASMDKgAnv37v3PBEWwYhQxqmBkYGBgYIQrAAgwAF2VAiB+K8e/AAAAAElFTkSuQmCC')] ${dec.removeBg ? 'cursor-crosshair border-purple-500 ring-1 ring-purple-500' : 'border-zinc-700 bg-zinc-800'}`}
                        onClick={(e) => handlePreviewClick(e, dec, false)}
                        title={dec.removeBg ? "点击吸取颜色" : ""}
                     >
@@ -718,11 +735,11 @@ export default function App() {
                     <div>
                       <span className="block text-xs font-medium text-zinc-300">图层 {index + 1}</span>
                       <div className="flex items-center gap-1 mt-1">
-                        <span className="text-[10px] text-zinc-500">智能抠图</span>
+                        <span className="text-[10px] text-zinc-500 flex items-center gap-1"><Wand2 size={10}/>自动抠图</span>
                         <button
                           type="button"
                           onClick={() => handleDecBgChange(dec.id, { removeBg: !dec.removeBg })}
-                          className={`relative inline-flex h-3 w-5 items-center rounded-full transition-colors ${dec.removeBg ? 'bg-blue-500' : 'bg-zinc-700'}`}
+                          className={`relative inline-flex h-3 w-5 items-center rounded-full transition-colors ${dec.removeBg ? 'bg-purple-500' : 'bg-zinc-700'}`}
                         >
                           <span className={`inline-block h-2 w-2 transform rounded-full bg-white transition-transform ${dec.removeBg ? 'translate-x-2.5' : 'translate-x-0.5'}`} />
                         </button>
@@ -736,7 +753,7 @@ export default function App() {
                 
                 {dec.removeBg && (
                   <div className="mb-3 p-2 bg-zinc-900/80 rounded border border-zinc-800/80">
-                     <Toggle label="全局穿透抠图" checked={dec.bgGlobal} onChange={(val) => handleDecBgChange(dec.id, { bgGlobal: val })} />
+                     <Toggle label="全局穿透抠图" checked={dec.bgGlobal} onChange={(val) => handleDecBgChange(dec.id, { bgGlobal: val })} activeColor="bg-purple-500" />
                      <Slider label="容差去白边" value={dec.bgTolerance} min={0} max={150} onChange={(val) => handleDecBgChange(dec.id, { bgTolerance: val })} />
                   </div>
                 )}
@@ -748,7 +765,12 @@ export default function App() {
                 <Slider label="分布角度 (可画布拖拽)" value={dec.angleOffset} min={0} max={360} unit="°"
                   onChange={(val) => setDecorations(decs => decs.map(d => d.id === dec.id ? { ...d, angleOffset: val } : d))} />
                 
-                <Toggle label="图案底部朝向中心" checked={dec.faceCenter} onChange={(val) => setDecorations(decs => decs.map(d => d.id === dec.id ? { ...d, faceCenter: val } : d))} />
+                <Toggle 
+                  label="图案底部朝向中心" 
+                  checked={dec.faceCenter} 
+                  onChange={(val) => setDecorations(decs => decs.map(d => d.id === dec.id ? { ...d, faceCenter: val } : d))}
+                  activeColor="bg-purple-500"
+                />
 
                 <div className="grid grid-cols-2 gap-3 mt-1 pt-1 border-t border-zinc-800/50">
                   <Slider label="缩放" value={dec.scale} min={10} max={200} unit="%"
@@ -794,10 +816,19 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {exportFormat !== 'jpg' && (
+              <Toggle
+                 label={<><span className="w-3 h-3 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAAXNSR0IArs4c6QAAACVJREFUKFNjZCASMDKgAnv37v3PBEWwYhQxqmBkYGBgYIQrAAgwAF2VAiB+K8e/AAAAAElFTkSuQmCC')] border border-zinc-500 rounded-[2px] inline-block opacity-80 mr-1" /> 透明背景</>}
+                 checked={exportTransparent}
+                 onChange={setExportTransparent}
+                 activeColor="bg-purple-500"
+               />
+            )}
             
             <button 
               onClick={handleExport}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-2"
+              className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-2"
             >
               <Download size={16} />
               导出 {exportFormat.toUpperCase()}
