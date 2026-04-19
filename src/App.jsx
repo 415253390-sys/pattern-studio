@@ -626,10 +626,10 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen w-full flex bg-zinc-950 text-zinc-300 font-sans overflow-hidden selection:bg-blue-500/30">
+    <div className="fixed inset-0 w-full flex flex-col md:flex-row bg-zinc-950 text-zinc-300 font-sans overflow-hidden selection:bg-blue-500/30">
       
-      {/* Left Panel - Controls */}
-      <div className="w-80 bg-zinc-900 border-r border-zinc-800 flex flex-col z-10 shadow-2xl overflow-y-auto custom-scrollbar">
+      {/* Left Panel - Controls (手机端下放，桌面端居左) */}
+      <div className="flex-1 md:flex-none w-full md:w-80 bg-zinc-900 border-t md:border-t-0 md:border-r border-zinc-800 flex flex-col z-10 shadow-2xl overflow-y-auto custom-scrollbar order-2 md:order-1 shrink-0">
         <div className="p-4 border-b border-zinc-800 bg-zinc-900/95 sticky top-0 backdrop-blur-md z-20">
           <h1 className="text-sm font-bold text-white flex items-center gap-2">
             <Layers className="text-purple-500" size={18} />
@@ -803,84 +803,4 @@ export default function App() {
             {exportFormat !== 'svg' && (
               <div>
                 <span className="block text-xs text-zinc-400 mb-2 font-medium">分辨率</span>
-                <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
-                  {[1, 2, 4].map(res => (
-                    <button 
-                      key={res}
-                      onClick={() => setExportRes(res)}
-                      className={`flex-1 py-1.5 text-xs font-medium rounded ${exportRes === res ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      {res}x
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {exportFormat !== 'jpg' && (
-              <Toggle
-                 label={<><span className="w-3 h-3 bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAAXNSR0IArs4c6QAAACVJREFUKFNjZCASMDKgAnv37v3PBEWwYhQxqmBkYGBgYIQrAAgwAF2VAiB+K8e/AAAAAElFTkSuQmCC')] border border-zinc-500 rounded-[2px] inline-block opacity-80 mr-1" /> 透明背景</>}
-                 checked={exportTransparent}
-                 onChange={setExportTransparent}
-                 activeColor="bg-purple-500"
-               />
-            )}
-            
-            <button 
-              onClick={handleExport}
-              className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white py-2.5 rounded-lg text-sm font-semibold transition-colors mt-2"
-            >
-              <Download size={16} />
-              导出 {exportFormat.toUpperCase()}
-            </button>
-          </div>
-        </SectionPanel>
-      </div>
-
-      {/* Right Panel - Working Area */}
-      <div className="flex-1 bg-zinc-950 flex flex-col relative bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+CjxyZWN0IHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgZmlsbD0ibm9uZSI+PC9yZWN0Pgo8Y2lyY2xlIGN4PSIyIiBjeT0iMiIgcj0iMSIgZmlsbD0icmdiYSgyNTUsIDI1NSwgMjU1LCAwLjA1KSI+PC9jaXJjbGU+Cjwvc3ZnPg==')]">
-        
-        {/* Top toolbar */}
-        <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-900/50 backdrop-blur z-20">
-           <div className="text-xs text-zinc-500 flex items-center gap-3">
-              <span className="flex items-center gap-1"><Move size={12}/> 提示: 在画布环形虚线上拖拽可直接调节半径和角度</span>
-           </div>
-        </div>
-
-        {/* Canvas Container */}
-        <div className="flex-1 overflow-auto flex items-center justify-center p-8">
-          <div 
-            className="relative shadow-2xl shadow-black/50 overflow-hidden"
-            style={{ width: CANVAS_SIZE, height: CANVAS_SIZE, backgroundColor: '#0b1121' }}
-          >
-            {/* Top Left Status Badge */}
-            <div className="absolute top-4 left-4 flex items-center gap-2 z-10 pointer-events-none">
-               <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]"></div>
-               <span className="text-xs font-mono text-zinc-500">800×800px</span>
-            </div>
-
-            <canvas
-              ref={canvasRef}
-              width={CANVAS_SIZE}
-              height={CANVAS_SIZE}
-              className="absolute top-0 left-0"
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerUp}
-              style={{ touchAction: 'none' }}
-            />
-          </div>
-        </div>
-      </div>
-      
-      {/* Global Styles for Scrollbar */}
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #52525b; }
-      `}} />
-    </div>
-  );
-}
+                <div className="flex bg-zinc-95
